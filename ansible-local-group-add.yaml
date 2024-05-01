@@ -1,0 +1,47 @@
+---
+- name: Add domain group to local administrators group
+  hosts: windows
+  gather_facts: true
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: powershell
+    ansible_become: true
+    ansible_become_user: '{{ ansible_user }}'
+
+  tasks:
+
+    - name: Add a local and domain user to a local group
+      ansible.windows.win_group_membership:
+        name: Administrators
+        members:
+          - '{{ group }}'
+        state: present
+
+- name: Linux Server Configuration
+  hosts: linux
+  gather_facts: true
+  become: true
+  become_method: sudo
+
+  tasks:
+
+    - name: Add group to sudoers
+      ansible.builtin.blockinfile:
+        backup: true
+        state: present
+        path: /etc/sudoers
+        marker: "# {mark} ANSIBLE MANAGED BLOCK AUTOSYS ADMINS"
+        insertbefore: '# BEGIN ANSIBLE MANAGED BLOCK'
+        block: |
+          '{{ group }}'  ALL=(ALL) ALL
+
+    - name: Add Group to sssd.conf
+      ansible.builtin.replace:
+        path: '/etc/sssd/sssd.conf'
+        regexp: '^(simple_allow_groups\s+.*)'
+        replace: '\1,{{ group }}'
+
+    - name: Restart SSSD systemd service
+      ansible.builtin.systemd:
+        name: 'sssd'
+        state: restarted
